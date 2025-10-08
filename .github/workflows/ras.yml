@@ -18,13 +18,13 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}  # Org-owned repos use GITHUB_TOKEN
+          username: md-tareqaziz
+          password: ${{ secrets.TOKEN }}  # Org-owned repos use GITHUB_TOKEN
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
           context: .  # Points to yourapp/ where Dockerfile is
           push: true
-          tags: ghcr.io/ambitionix/resume_ai_api:latest  # Replace 'your-org' with your org name
+          tags: ghcr.io/md-tareqaziz/resume_ai_api:latest  # Replace 'your-org' with your org name
           platforms: linux/amd64
