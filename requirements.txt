@@ -4,3 +4,4 @@ groq
 pdfplumber
 pydantic
 python-dotenv
+python-multipart
