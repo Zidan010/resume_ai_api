@@ -28,3 +28,14 @@ jobs:
           push: true
           tags: ghcr.io/md-tareqaziz/resume_ai_api:latest  # Replace 'your-org' with your org name
           platforms: linux/amd64
+
+            - name: Write SSH keys
+        run: |
+          install -m 600 -D /dev/null ~/.ssh/id_rsa
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.SERVER_HOST }} > ~/.ssh/known_hosts
+
+      - name: SSH into server and run docker compose
+        run: |
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "cd /home/dev/deployment/backend && docker compose -f resume-ai.yml down && docker compose -f resume-ai.yml up --pull always -d"
+          echo "Successfully deployed."
