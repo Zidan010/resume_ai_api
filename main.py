@@ -357,7 +357,7 @@ async def suggest_skills(request: SkillsRequest):
         # Create user prompt
         user_message = (
             f"You are a professional job skills writer. Generate concise and professional job skills for the job title '{request.job_title}'. "
-            f"Provide maximum 6-8 skills as a comma-separated list of single words or short phrases (e.g., 'html, css, scrum master, critical thinking'). "
+            f"Provide maximum 6-8 skills as a comma-separated list of single words or short phrases (e.g., 'html, css, scrum master'). "
             f"Ensure the skills are persuasive, tailored to the job title, and suitable for a professional CV. "
             f"Provide only the skills list, without any additional text or formatting."
         )
