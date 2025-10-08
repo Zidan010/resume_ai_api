@@ -26,5 +26,5 @@ jobs:
         with:
           context: .  # Points to yourapp/ where Dockerfile is
           push: true
-          tags: ghcr.io/md-tareqaziz/resume_ai_api:latest  # Replace 'your-org' with your org name
+          tags: ghcr.io/Ambitionix/resume_ai_api:latest  # Replace 'your-org' with your org name
           platforms: linux/amd64
