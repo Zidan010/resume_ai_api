@@ -481,6 +481,154 @@ async def generate_cv_structure(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=f"Error generating CV structure: {str(e)}")
 
 
+
+
+# Add these new Pydantic models after your existing models (after SkillsRequest)
+
+class ATSScoreRequest(BaseModel):
+    cv_data: Dict[str, Any]  # CV data following CV_STRUCTURE_SCHEMA
+    job_title: str
+    job_description: str
+
+class SectionFeedback(BaseModel):
+    section_name: str
+    score: float  # 0-100
+    feedback: str
+    strengths: list[str]
+    improvements: list[str]
+
+class ATSScoreResponse(BaseModel):
+    overall_score: float  # 0-100
+    overall_feedback: str
+    section_feedbacks: list[SectionFeedback]
+    keyword_match_percentage: float
+    execution_time: float
+    recommendations: list[str]
+
+# Add this helper function before the endpoint
+
+def extract_keywords_from_job(job_description: str) -> list[str]:
+    """Extract important keywords from job description."""
+    # Remove common words and extract meaningful terms
+    common_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 
+                    'of', 'with', 'is', 'are', 'was', 'were', 'be', 'been', 'being'}
+    words = re.findall(r'\b[a-zA-Z]{3,}\b', job_description.lower())
+    keywords = [w for w in words if w not in common_words]
+    return list(set(keywords))[:50]  # Return top 50 unique keywords
+
+# Add this new endpoint after your existing endpoints
+
+@app.post("/generate/ats_score", response_model=ATSScoreResponse)
+async def generate_ats_score(request: ATSScoreRequest):
+    try:
+        # Validate CV data structure
+        if not request.cv_data:
+            raise HTTPException(status_code=400, detail="CV data is required")
+        
+        # Extract CV text for analysis
+        cv_text = json.dumps(request.cv_data, indent=2)
+        
+        # Model generation parameters
+        max_tokens = 4096
+        temperature = 0.3  # Lower temperature for more consistent scoring
+        
+        
+        # Create comprehensive analysis prompt
+        system_prompt = (
+            "You are an expert ATS (Applicant Tracking System) analyzer and professional recruiter. "
+            "Your task is to analyze a candidate's CV against a job description and provide:\n"
+            "1. An overall ATS score (0-100)\n"
+            "2. Section-by-section analysis with scores and feedback\n"
+            "3. Keyword match analysis\n"
+            "4. Actionable recommendations\n\n"
+            "Scoring criteria:\n"
+            "- 90-100: Excellent match, highly qualified\n"
+            "- 75-89: Good match, qualified with minor gaps\n"
+            "- 60-74: Moderate match, some relevant experience\n"
+            "- 40-59: Weak match, significant gaps\n"
+            "- 0-39: Poor match, not qualified\n\n"
+            "Analyze these CV sections: personal_info, education, work_experience, skills, projects, certifications, awards.\n"
+            "Provide specific, actionable feedback for each section."
+        )
+        
+        user_message = (
+            f"Job Title: {request.job_title}\n\n"
+            f"Job Description:\n{request.job_description}\n\n"
+            f"Candidate CV Data:\n{cv_text}\n\n"
+            f"Please analyze this CV against the job requirements and provide a comprehensive ATS score analysis. "
+            f"Return your response as a JSON object with the following structure:\n"
+            f"{{\n"
+            f'  "overall_score": <float 0-100>,\n'
+            f'  "overall_feedback": "<string>",\n'
+            f'  "section_feedbacks": [\n'
+            f'    {{\n'
+            f'      "section_name": "<string>",\n'
+            f'      "score": <float 0-100>,\n'
+            f'      "feedback": "<string>",\n'
+            f'      "strengths": ["<string>", ...],\n'
+            f'      "improvements": ["<string>", ...]\n'
+            f'    }}\n'
+            f'  ],\n'
+            f'  "keyword_match_percentage": <float 0-100>,\n'
+            f'  "recommendations": ["<string>", ...]\n'
+            f'}}\n\n'
+            f"Ensure all scores are realistic and based on actual matches between the CV and job requirements."
+        )
+        
+        # Generate ATS analysis using Groq API
+        response = client.chat.completions.create(
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message}
+            ],
+            model="llama-3.3-70b-versatile",
+            max_tokens=max_tokens,
+            temperature=temperature,
+            response_format={"type": "json_object"}
+        )
+                 
+        # Extract and parse the generated analysis
+        generated_analysis = response.choices[0].message.content
+        analysis_data = json.loads(generated_analysis)
+        
+        # Ensure all required fields are present
+        if "overall_score" not in analysis_data:
+            analysis_data["overall_score"] = 0.0
+        if "overall_feedback" not in analysis_data:
+            analysis_data["overall_feedback"] = "Unable to generate feedback"
+        if "section_feedbacks" not in analysis_data:
+            analysis_data["section_feedbacks"] = []
+        if "keyword_match_percentage" not in analysis_data:
+            analysis_data["keyword_match_percentage"] = 0.0
+        if "recommendations" not in analysis_data:
+            analysis_data["recommendations"] = []
+        
+        # Convert section feedbacks to proper format
+        section_feedbacks = []
+        for section in analysis_data["section_feedbacks"]:
+            section_feedbacks.append(SectionFeedback(
+                section_name=section.get("section_name", "Unknown"),
+                score=float(section.get("score", 0.0)),
+                feedback=section.get("feedback", ""),
+                strengths=section.get("strengths", []),
+                improvements=section.get("improvements", [])
+            ))
+        
+        return ATSScoreResponse(
+            overall_score=float(analysis_data["overall_score"]),
+            overall_feedback=analysis_data["overall_feedback"],
+            section_feedbacks=section_feedbacks,
+            keyword_match_percentage=float(analysis_data["keyword_match_percentage"]),
+            recommendations=analysis_data["recommendations"]
+        )
+    
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=500, detail=f"Failed to parse ATS analysis: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating ATS score: {str(e)}")
+
+
+
 import uvicorn
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=9090)
