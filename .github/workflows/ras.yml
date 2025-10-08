@@ -29,7 +29,7 @@ jobs:
           tags: ghcr.io/md-tareqaziz/resume_ai_api:latest  # Replace 'your-org' with your org name
           platforms: linux/amd64
 
-            - name: Write SSH keys
+      - name: Write SSH keys
         run: |
           install -m 600 -D /dev/null ~/.ssh/id_rsa
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
