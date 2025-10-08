@@ -370,7 +370,6 @@ The parsed CV follows a standardized schema with the following sections:
     }
   ],
   "keyword_match_percentage": 75.5,
-  "execution_time": 4.23,
   "recommendations": [
     "Add Kubernetes experience to skills section to better match job requirements",
     "Obtain AWS certification to strengthen cloud expertise credentials",

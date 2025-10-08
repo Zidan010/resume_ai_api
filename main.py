@@ -502,7 +502,6 @@ class ATSScoreResponse(BaseModel):
     overall_feedback: str
     section_feedbacks: list[SectionFeedback]
     keyword_match_percentage: float
-    execution_time: float
     recommendations: list[str]
 
 # Add this helper function before the endpoint
