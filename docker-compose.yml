@@ -1,0 +1,9 @@
+version: '3.8'
+
+services:
+  AI-API-Project:
+    build: .  # Builds from your Dockerfile (or use 'image: yourusername/cv-app:latest' if pre-built and pushed)
+    ports:
+      - "9090:9090"  # Map host port 9090 to container port 9090
+    environment:
+      - GROQ_API_KEY=${GROQ_API_KEY}  # Injects from .env or host env
