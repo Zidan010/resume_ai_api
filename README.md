@@ -239,63 +239,31 @@ The parsed CV follows a standardized schema with the following sections:
 
 **Endpoint:** `POST /generate/ats_score`
 
-**Description:** Analyzes a CV against a job description and provides an ATS (Applicant Tracking System) compatibility score with detailed feedback.
+**Description**: Analyzes a CV provided as a PDF file against a job title and job description, generating an ATS compatibility score with detailed feedback. The CV is processed to extract structured data in the background, which is then used to evaluate compatibility with the job requirements.
 
-**Request Body:**
-```json
-{
-  "cv_data": {
-    "personal_info": {
-      "full_name": "John Doe",
-      "email": ["john.doe@email.com"],
-      "phone": ["+1234567890"],
-      "linkedin": "linkedin.com/in/johndoe",
-      "address": "123 Main St",
-      "city": "New York",
-      "country": "USA"
-    },
-    "education": [
-      {
-        "degree": "B.S. in Computer Science",
-        "institution": "Stanford University",
-        "start_date": "2008",
-        "end_date": "2012",
-        "result": ["3.8/4.0 GPA"]
-      }
-    ],
-    "work_experience": [
-      {
-        "job_title": "Software Engineer",
-        "company": "TechCorp",
-        "dates": "2012-2022",
-        "responsibilities": ["Developed web applications", "Led agile teams"],
-        "achievements": ["Increased user engagement by 30%"]
-      }
-    ],
-    "skills": {
-      "technical": ["Python", "JavaScript", "AWS", "Docker"],
-      "professional": ["Leadership", "Agile", "Communication"]
-    },
-    "projects": [],
-    "publications": [],
-    "certifications": [],
-    "awards": [],
-    "references": [],
-    "hobbies": []
-  },
-  "job_title": "Senior Software Engineer",
-  "job_description": "We are seeking a Senior Software Engineer with 5+ years of experience in Python, cloud technologies (AWS/Azure), and containerization (Docker/Kubernetes). The ideal candidate will have strong leadership skills, experience with agile methodologies, and a proven track record of building scalable applications. Bachelor's degree in Computer Science or related field required."
-}
-```
-
-**Request Parameters:**
+**Request Parameters**:
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| cv_data | object | Yes | Structured CV data (follows CV_STRUCTURE_SCHEMA) |
-| job_title | string | Yes | Target job position |
-| job_description | string | Yes | Full job description text |
+| cv_file | file | Yes | PDF file containing the candidate's CV |
+| job_title | string | Yes | Target job position (must not be empty or whitespace-only) |
+| job_description | string | Yes | Full job description text (must not be empty or whitespace-only) |
 
-**Response:**
+**Request Example (Form Data)**:
+- **Content-Type**: `multipart/form-data`
+- **Form Fields**:
+  - `cv_file`: (Upload a file named `cv.pdf`)
+  - `job_title`: `"Senior Software Engineer"`
+  - `job_description`: `"We are seeking a Senior Software Engineer with 5+ years of experience in Python, cloud technologies (AWS/Azure), and containerization (Docker/Kubernetes). The ideal candidate will have strong leadership skills, experience with agile methodologies, and a proven track record of building scalable applications. Bachelor's degree in Computer Science or related field required."`
+
+**Request Example (cURL)**:
+```bash
+curl -X POST "http://localhost:9090/generate/ats_score" \
+  -F "cv_file=@/path/to/cv.pdf" \
+  -F "job_title=Senior Software Engineer" \
+  -F "job_description=We are seeking a Senior Software Engineer with 5+ years of experience in Python, cloud technologies (AWS/Azure), and containerization (Docker/Kubernetes). The ideal candidate will have strong leadership skills, experience with agile methodologies, and a proven track record of building scalable applications. Bachelor's degree in Computer Science or related field required."
+```
+
+**Response**:
 ```json
 {
   "overall_score": 82.5,
@@ -381,7 +349,7 @@ The parsed CV follows a standardized schema with the following sections:
 }
 ```
 
-**Scoring System:**
+**Scoring System**:
 | Score Range | Rating | Description |
 |-------------|--------|-------------|
 | 90-100 | Excellent | Highly qualified, exceptional match |

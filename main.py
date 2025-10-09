@@ -481,12 +481,6 @@ async def generate_cv_structure(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=f"Error generating CV structure: {str(e)}")
 
 
-
-class ATSScoreRequest(BaseModel):
-    cv_file: UploadFile = File(...)
-    job_title: str = Form(...)
-    job_description: str = Form(...)
-
 class SectionFeedback(BaseModel):
     section_name: str
     score: float  # 0-100
@@ -517,10 +511,16 @@ def extract_keywords_from_job(job_description: str) -> list[str]:
 @app.post("/generate/ats_score", response_model=ATSScoreResponse)
 async def generate_ats_score(
     cv_file: UploadFile = File(...),
-    job_title: str = Form(...),
-    job_description: str = Form(...)
+    job_title: str = Form(default=""),
+    job_description: str = Form(default="")
 ):
     try:
+        # Validate job_title and job_description
+        if not job_title or not job_title.strip():
+            raise HTTPException(status_code=400, detail="Job title cannot be empty")
+        if not job_description or not job_description.strip():
+            raise HTTPException(status_code=400, detail="Job description cannot be empty")
+
         # Validate file type
         if not cv_file.filename.endswith('.pdf'):
             raise HTTPException(status_code=400, detail="Only PDF files are supported")
@@ -668,7 +668,7 @@ async def generate_ats_score(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating ATS score: {str(e)}")
-
+    
 import uvicorn
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=9090)
