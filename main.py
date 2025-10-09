@@ -2,7 +2,7 @@ import os
 import re
 import json
 import logging
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File,Form
 from pydantic import BaseModel
 from groq import Groq
 import time
@@ -482,13 +482,10 @@ async def generate_cv_structure(file: UploadFile = File(...)):
 
 
 
-
-# Add these new Pydantic models after your existing models (after SkillsRequest)
-
 class ATSScoreRequest(BaseModel):
-    cv_data: Dict[str, Any]  # CV data following CV_STRUCTURE_SCHEMA
-    job_title: str
-    job_description: str
+    cv_file: UploadFile = File(...)
+    job_title: str = Form(...)
+    job_description: str = Form(...)
 
 class SectionFeedback(BaseModel):
     section_name: str
@@ -518,115 +515,159 @@ def extract_keywords_from_job(job_description: str) -> list[str]:
 # Add this new endpoint after your existing endpoints
 
 @app.post("/generate/ats_score", response_model=ATSScoreResponse)
-async def generate_ats_score(request: ATSScoreRequest):
+async def generate_ats_score(
+    cv_file: UploadFile = File(...),
+    job_title: str = Form(...),
+    job_description: str = Form(...)
+):
     try:
-        # Validate CV data structure
-        if not request.cv_data:
-            raise HTTPException(status_code=400, detail="CV data is required")
-        
-        # Extract CV text for analysis
-        cv_text = json.dumps(request.cv_data, indent=2)
-        
-        # Model generation parameters
-        max_tokens = 4096
-        temperature = 0.3  # Lower temperature for more consistent scoring
-        
-        
-        # Create comprehensive analysis prompt
-        system_prompt = (
-            "You are an expert ATS (Applicant Tracking System) analyzer and professional recruiter. "
-            "Your task is to analyze a candidate's CV against a job description and provide:\n"
-            "1. An overall ATS score (0-100)\n"
-            "2. Section-by-section analysis with scores and feedback\n"
-            "3. Keyword match analysis\n"
-            "4. Actionable recommendations\n\n"
-            "Scoring criteria:\n"
-            "- 90-100: Excellent match, highly qualified\n"
-            "- 75-89: Good match, qualified with minor gaps\n"
-            "- 60-74: Moderate match, some relevant experience\n"
-            "- 40-59: Weak match, significant gaps\n"
-            "- 0-39: Poor match, not qualified\n\n"
-            "Analyze these CV sections: personal_info, education, work_experience, skills, projects, certifications, awards.\n"
-            "Provide specific, actionable feedback for each section."
-        )
-        
-        user_message = (
-            f"Job Title: {request.job_title}\n\n"
-            f"Job Description:\n{request.job_description}\n\n"
-            f"Candidate CV Data:\n{cv_text}\n\n"
-            f"Please analyze this CV against the job requirements and provide a comprehensive ATS score analysis. "
-            f"Return your response as a JSON object with the following structure:\n"
-            f"{{\n"
-            f'  "overall_score": <float 0-100>,\n'
-            f'  "overall_feedback": "<string>",\n'
-            f'  "section_feedbacks": [\n'
-            f'    {{\n'
-            f'      "section_name": "<string>",\n'
-            f'      "score": <float 0-100>,\n'
-            f'      "feedback": "<string>",\n'
-            f'      "strengths": ["<string>", ...],\n'
-            f'      "improvements": ["<string>", ...]\n'
-            f'    }}\n'
-            f'  ],\n'
-            f'  "keyword_match_percentage": <float 0-100>,\n'
-            f'  "recommendations": ["<string>", ...]\n'
-            f'}}\n\n'
-            f"Ensure all scores are realistic and based on actual matches between the CV and job requirements."
-        )
-        
-        # Generate ATS analysis using Groq API
-        response = client.chat.completions.create(
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_message}
-            ],
-            model="llama-3.3-70b-versatile",
-            max_tokens=max_tokens,
-            temperature=temperature,
-            response_format={"type": "json_object"}
-        )
-                 
-        # Extract and parse the generated analysis
-        generated_analysis = response.choices[0].message.content
-        analysis_data = json.loads(generated_analysis)
-        
-        # Ensure all required fields are present
-        if "overall_score" not in analysis_data:
-            analysis_data["overall_score"] = 0.0
-        if "overall_feedback" not in analysis_data:
-            analysis_data["overall_feedback"] = "Unable to generate feedback"
-        if "section_feedbacks" not in analysis_data:
-            analysis_data["section_feedbacks"] = []
-        if "keyword_match_percentage" not in analysis_data:
-            analysis_data["keyword_match_percentage"] = 0.0
-        if "recommendations" not in analysis_data:
-            analysis_data["recommendations"] = []
-        
-        # Convert section feedbacks to proper format
-        section_feedbacks = []
-        for section in analysis_data["section_feedbacks"]:
-            section_feedbacks.append(SectionFeedback(
-                section_name=section.get("section_name", "Unknown"),
-                score=float(section.get("score", 0.0)),
-                feedback=section.get("feedback", ""),
-                strengths=section.get("strengths", []),
-                improvements=section.get("improvements", [])
-            ))
-        
-        return ATSScoreResponse(
-            overall_score=float(analysis_data["overall_score"]),
-            overall_feedback=analysis_data["overall_feedback"],
-            section_feedbacks=section_feedbacks,
-            keyword_match_percentage=float(analysis_data["keyword_match_percentage"]),
-            recommendations=analysis_data["recommendations"]
-        )
-    
-    except json.JSONDecodeError as e:
-        raise HTTPException(status_code=500, detail=f"Failed to parse ATS analysis: {str(e)}")
+        # Validate file type
+        if not cv_file.filename.endswith('.pdf'):
+            raise HTTPException(status_code=400, detail="Only PDF files are supported")
+
+        # Save uploaded PDF to temporary file
+        with NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
+            temp_file.write(await cv_file.read())
+            temp_file_path = temp_file.name
+
+        try:
+            # Extract text from PDF
+            with pdfplumber.open(temp_file_path) as pdf:
+                input_text = "\n".join(page.extract_text() or "" for page in pdf.pages)
+            if not input_text.strip():
+                raise ValueError("No text extracted from PDF")
+
+            # Generate CV structure
+            system_prompt = (
+                "You are a professional CV parsing assistant. Extract key information from the provided CV text and structure it according to the provided JSON schema. "
+                "Ensure all required fields are populated, inferring reasonable defaults for missing data where possible (e.g., empty arrays for optional fields like projects, publications)."
+            )
+
+            user_message = (
+                f"CV Text:\n{input_text}\n\n"
+                f"Extract and structure the CV data into the following JSON schema:\n{json.dumps(CV_STRUCTURE_SCHEMA, indent=2)}\n\n"
+                f"Return the parsed CV data as a JSON object."
+            )
+
+            start_time = time.time()
+
+            response = client.chat.completions.create(
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message}
+                ],
+                model="llama-3.3-70b-versatile",
+                max_tokens=4096,
+                temperature=0.5,
+                response_format={"type": "json_object"}
+            )
+
+            generated_json = response.choices[0].message.content
+            cleaned_json = clean_output(generated_json, output_type="cv_structure")
+            cv_data = json.loads(cleaned_json)
+
+            # Proceed with ATS analysis
+            cv_text = json.dumps(cv_data, indent=2)
+            max_tokens = 4096
+            temperature = 0.3
+
+            system_prompt = (
+                "You are an expert ATS (Applicant Tracking System) analyzer and professional recruiter. "
+                "Your task is to analyze a candidate's CV against a job description and provide:\n"
+                "1. An overall ATS score (0-100)\n"
+                "2. Section-by-section analysis with scores and feedback\n"
+                "3. Keyword match analysis\n"
+                "4. Actionable recommendations\n\n"
+                "Scoring criteria:\n"
+                "- 90-100: Excellent match, highly qualified\n"
+                "- 75-89: Good match, qualified with minor gaps\n"
+                "- 60-74: Moderate match, some relevant experience\n"
+                "- 40-59: Weak match, significant gaps\n"
+                "- 0-39: Poor match, not qualified\n\n"
+                "Analyze these CV sections: personal_info, education, work_experience, skills, projects, certifications, awards.\n"
+                "Provide specific, actionable feedback for each section."
+            )
+
+            user_message = (
+                f"Job Title: {job_title}\n\n"
+                f"Job Description:\n{job_description}\n\n"
+                f"Candidate CV Data:\n{cv_text}\n\n"
+                f"Please analyze this CV against the job requirements and provide a comprehensive ATS score analysis. "
+                f"Return your response as a JSON object with the following structure:\n"
+                f"{{\n"
+                f'  "overall_score": <float 0-100>,\n'
+                f'  "overall_feedback": "<string>",\n'
+                f'  "section_feedbacks": [\n'
+                f'    {{\n'
+                f'      "section_name": "<string>",\n'
+                f'      "score": <float 0-100>,\n'
+                f'      "feedback": "<string>",\n'
+                f'      "strengths": ["<string>", ...],\n'
+                f'      "improvements": ["<string>", ...]\n'
+                f'    }}\n'
+                f'  ],\n'
+                f'  "keyword_match_percentage": <float 0-100>,\n'
+                f'  "recommendations": ["<string>", ...]\n'
+                f'}}\n\n'
+                f"Ensure all scores are realistic and based on actual matches between the CV and job requirements."
+            )
+
+            response = client.chat.completions.create(
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message}
+                ],
+                model="llama-3.3-70b-versatile",
+                max_tokens=max_tokens,
+                temperature=temperature,
+                response_format={"type": "json_object"}
+            )
+
+            execution_time = time.time() - start_time
+
+            generated_analysis = response.choices[0].message.content
+            analysis_data = json.loads(generated_analysis)
+
+            # Ensure all required fields are present
+            if "overall_score" not in analysis_data:
+                analysis_data["overall_score"] = 0.0
+            if "overall_feedback" not in analysis_data:
+                analysis_data["overall_feedback"] = "Unable to generate feedback"
+            if "section_feedbacks" not in analysis_data:
+                analysis_data["section_feedbacks"] = []
+            if "keyword_match_percentage" not in analysis_data:
+                analysis_data["keyword_match_percentage"] = 0.0
+            if "recommendations" not in analysis_data:
+                analysis_data["recommendations"] = []
+
+            section_feedbacks = []
+            for section in analysis_data["section_feedbacks"]:
+                section_feedbacks.append(SectionFeedback(
+                    section_name=section.get("section_name", "Unknown"),
+                    score=float(section.get("score", 0.0)),
+                    feedback=section.get("feedback", ""),
+                    strengths=section.get("strengths", []),
+                    improvements=section.get("improvements", [])
+                ))
+
+            # Clean up temporary file
+            os.unlink(temp_file_path)
+
+            return ATSScoreResponse(
+                overall_score=float(analysis_data["overall_score"]),
+                overall_feedback=analysis_data["overall_feedback"],
+                section_feedbacks=section_feedbacks,
+                keyword_match_percentage=float(analysis_data["keyword_match_percentage"]),
+                recommendations=analysis_data["recommendations"]
+            )
+
+        except Exception as e:
+            if os.path.exists(temp_file_path):
+                os.unlink(temp_file_path)
+            raise ValueError(f"Failed to process PDF: {str(e)}")
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating ATS score: {str(e)}")
-
-
 
 import uvicorn
 if __name__ == "__main__":
